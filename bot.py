@@ -102,10 +102,12 @@ async def _ask_ollama(messages: list[dict]) -> str:
 
 
 FALLBACK_MODELS = [
-    "meta-llama/llama-3.3-70b-instruct:free",
     "deepseek/deepseek-chat-v3-0324:free",
+    "meta-llama/llama-4-maverick:free",
     "google/gemma-3-27b-it:free",
     "qwen/qwen3-235b-a22b:free",
+    "microsoft/mai-ds-r1:free",
+    "mistralai/mistral-small-3.1-24b-instruct:free",
 ]
 
 
