@@ -24,7 +24,7 @@ def init_tools(database: Database):
 def search_web(query: str) -> str:
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=5, region="ru-ru"))
+            results = list(ddgs.text(query, max_results=5, region="wt-wt"))
         if not results:
             return "Ничего не найдено по запросу: " + query
         lines = []

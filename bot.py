@@ -110,6 +110,9 @@ FALLBACK_MODELS = [
 
 
 async def _ask_openrouter(messages: list[dict]) -> str:
+    if not OPENROUTER_API_KEY:
+        logger.error("OPENROUTER_API_KEY is empty! Set it in Render Environment Variables.")
+        return "OPENROUTER_API_KEY не задан. Настрой переменную окружения в Render."
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -136,12 +139,18 @@ async def _ask_openrouter(messages: list[dict]) -> str:
                         continue
                     if resp.status != 200:
                         text = await resp.text()
-                        logger.error(f"OpenRouter error {resp.status} ({model}): {text[:200]}")
+                        logger.error(f"OpenRouter error {resp.status} ({model}): {text[:300]}")
                         continue
                     data = await resp.json()
                     choices = data.get("choices", [])
                     if choices:
-                        return choices[0].get("message", {}).get("content", "Нет ответа от модели.")
+                        content = choices[0].get("message", {}).get("content", "")
+                        if content:
+                            logger.info(f"OpenRouter OK ({model}), {len(content)} chars")
+                            return content
+                        logger.warning(f"OpenRouter empty content from {model}")
+                        continue
+                    logger.warning(f"OpenRouter no choices from {model}: {data}")
                     continue
         except asyncio.TimeoutError:
             logger.warning(f"OpenRouter timeout on {model}")
@@ -343,6 +352,18 @@ async def reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_send(update, result)
 
 
+async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    info = (
+        f"Provider: {AI_PROVIDER}\n"
+        f"Model: {DEFAULT_MODEL}\n"
+        f"Token set: {'да' if TELEGRAM_BOT_TOKEN else 'НЕТ'}\n"
+        f"OpenRouter key: {'задан' if OPENROUTER_API_KEY else 'НЕ ЗАДАН'}\n"
+        f"Ollama URL: {OLLAMA_URL}\n"
+        f"DB: {DB_PATH}"
+    )
+    await safe_send(update, f"Debug info:\n{info}")
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_text = update.message.text
@@ -445,9 +466,12 @@ def main():
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("reminders", reminders_command))
+    app.add_handler(CommandHandler("debug", debug_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info(f"Bot started! Provider: {AI_PROVIDER}, Model: {DEFAULT_MODEL}")
+    logger.info(f"Bot starting! Provider: {AI_PROVIDER}, Model: {DEFAULT_MODEL}")
+    if AI_PROVIDER == "openrouter":
+        logger.info(f"OpenRouter key: {'set' if OPENROUTER_API_KEY else 'MISSING!'}")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
