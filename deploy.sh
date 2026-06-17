@@ -23,15 +23,24 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 5. Ollama (for AI)
-curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull llama3.2
+# 5. .env (configure your tokens)
+echo ""
+echo "=== Configure .env ==="
+echo "Create .env with your tokens:"
+echo "  TELEGRAM_BOT_TOKEN=your_token"
+echo "  AI_PROVIDER=openrouter"
+echo "  OPENROUTER_API_KEY=your_key"
+echo ""
+echo "Or for local Ollama:"
+echo "  AI_PROVIDER=ollama"
+echo "  OLLAMA_URL=http://localhost:11434/api/chat"
+echo ""
 
 # 6. Systemd service
 sudo tee /etc/systemd/system/agent-claud.service > /dev/null <<EOF
 [Unit]
 Description=Agent Claud Telegram Bot
-After=network.target ollama.service
+After=network.target
 
 [Service]
 Type=simple

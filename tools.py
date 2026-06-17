@@ -5,7 +5,7 @@ import urllib.parse
 from datetime import datetime, timedelta
 from typing import Optional
 
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 
 from database import Database
 
@@ -24,7 +24,7 @@ def init_tools(database: Database):
 def search_web(query: str) -> str:
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=6))
+            results = list(ddgs.text(query, max_results=5, region="ru-ru"))
         if not results:
             return "Ничего не найдено по запросу: " + query
         lines = []

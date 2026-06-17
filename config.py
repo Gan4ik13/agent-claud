@@ -6,7 +6,7 @@ load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
-AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama")
+AI_PROVIDER = os.getenv("AI_PROVIDER", "openrouter")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")

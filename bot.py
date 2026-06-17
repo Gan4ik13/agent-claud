@@ -101,36 +101,55 @@ async def _ask_ollama(messages: list[dict]) -> str:
         return f"Ошибка Ollama: {e}"
 
 
+FALLBACK_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "deepseek/deepseek-chat-v3-0324:free",
+    "google/gemma-3-27b-it:free",
+    "qwen/qwen3-235b-a22b:free",
+]
+
+
 async def _ask_openrouter(messages: list[dict]) -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
-    payload = {
-        "model": OPENROUTER_MODEL,
-        "messages": messages,
-        "max_tokens": 2048,
-        "temperature": 0.7,
-    }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{OPENROUTER_BASE_URL}/chat/completions",
-                json=payload,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=60),
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    logger.error(f"OpenRouter error {resp.status}: {text[:200]}")
-                    return "AI временно недоступен (лимиты). Попробуй позже."
-                data = await resp.json()
-                return data["choices"][0]["message"]["content"]
-    except asyncio.TimeoutError:
-        return "AI не отвечает (таймаут)."
-    except Exception as e:
-        logger.error(f"OpenRouter error: {e}")
-        return f"Ошибка OpenRouter: {e}"
+    models_to_try = [OPENROUTER_MODEL] + [m for m in FALLBACK_MODELS if m != OPENROUTER_MODEL]
+    for model in models_to_try:
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": 2048,
+            "temperature": 0.7,
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{OPENROUTER_BASE_URL}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=60),
+                ) as resp:
+                    if resp.status == 429:
+                        logger.warning(f"OpenRouter rate limit on {model}, trying next...")
+                        await asyncio.sleep(2)
+                        continue
+                    if resp.status != 200:
+                        text = await resp.text()
+                        logger.error(f"OpenRouter error {resp.status} ({model}): {text[:200]}")
+                        continue
+                    data = await resp.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        return choices[0].get("message", {}).get("content", "Нет ответа от модели.")
+                    continue
+        except asyncio.TimeoutError:
+            logger.warning(f"OpenRouter timeout on {model}")
+            continue
+        except Exception as e:
+            logger.error(f"OpenRouter error ({model}): {e}")
+            continue
+    return "AI временно недоступен. Попробуй через минуту."
 
 
 async def _ask_huggingface(messages: list[dict]) -> str:
@@ -330,7 +349,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.chat.send_action(action="typing")
 
-    tool_result = detect_tools(user_text, user_id)
+    tool_result = await asyncio.to_thread(detect_tools, user_text, user_id)
 
     history = db.get_history(user_id, limit=12)
     messages = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + build_now_context()}]
@@ -341,7 +360,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         messages.append({"role": "user", "content": user_text})
         messages.append({
             "role": "assistant",
-            "content": f"Вот результат:\n\n{tool_result}\n\nСформируй краткий ответ на основе этих данных.",
+            "content": f"Данные из инструментов:\n\n{tool_result}\n\nОтветь на вопрос пользователя на основе этих данных. Кратко и по делу.",
         })
     else:
         messages.append({"role": "user", "content": user_text})
@@ -349,9 +368,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.add_message(user_id, "user", user_text)
 
     answer = await ask_ai(messages)
-
-    if tool_result:
-        answer = tool_result + "\n\n" + answer
 
     db.add_message(user_id, "assistant", answer)
     await safe_send(update, answer)
@@ -368,11 +384,6 @@ async def reminder_checker(context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as e:
             logger.error(f"Failed to send reminder {r['id']}: {e}")
-
-
-async def post_init(application):
-    job_queue = application.job_queue
-    job_queue.run_repeating(reminder_checker, interval=30, first=10)
 
 
 # ========== HTTP SERVER (for Koyeb) ==========
@@ -417,6 +428,10 @@ async def post_init(application):
 def main():
     if not TELEGRAM_BOT_TOKEN:
         print("ERROR: Set TELEGRAM_BOT_TOKEN in .env")
+        sys.exit(1)
+
+    if AI_PROVIDER == "openrouter" and not OPENROUTER_API_KEY:
+        print("ERROR: Set OPENROUTER_API_KEY in .env for OpenRouter provider")
         sys.exit(1)
 
     web_thread = threading.Thread(target=run_web_server, daemon=True)
