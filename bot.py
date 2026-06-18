@@ -102,9 +102,10 @@ async def _ask_ollama(messages: list[dict]) -> str:
 
 FALLBACK_MODELS = [
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "google/gemma-3-27b-it:free",
-    "mistralai/mistral-small-3.2-24b-instruct:free",
-    "meta-llama/llama-4-maverick:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
 ]
 
 THINKING_MODELS = {"qwen/qwen3-coder:free", "qwen/qwen3-next-80b-a3b-instruct:free", "deepseek/deepseek-r1-0528:free"}
@@ -143,7 +144,7 @@ async def _ask_openrouter(messages: list[dict]) -> str:
                     timeout=aiohttp.ClientTimeout(total=60),
                 ) as resp:
                     if resp.status == 429:
-                        wait = min(5 * (i + 1), 30)
+                        wait = min(10 * (i + 1), 60)
                         logger.warning(f"Rate limit (429) на {model}, ждём {wait}с...")
                         await asyncio.sleep(wait)
                         continue
@@ -382,19 +383,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     tool_result = await asyncio.to_thread(detect_tools, user_text, user_id)
 
+    if tool_result:
+        db.add_message(user_id, "user", user_text)
+        db.add_message(user_id, "assistant", tool_result)
+        await safe_send(update, tool_result)
+        return
+
     history = db.get_history(user_id, limit=12)
     messages = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + build_now_context()}]
     for m in history:
         messages.append({"role": m["role"], "content": m["content"]})
 
-    if tool_result:
-        messages.append({"role": "user", "content": user_text})
-        messages.append({
-            "role": "assistant",
-            "content": f"Данные из инструментов:\n\n{tool_result}\n\nОтветь на вопрос пользователя на основе этих данных. Кратко и по делу.",
-        })
-    else:
-        messages.append({"role": "user", "content": user_text})
+    messages.append({"role": "user", "content": user_text})
 
     db.add_message(user_id, "user", user_text)
 
