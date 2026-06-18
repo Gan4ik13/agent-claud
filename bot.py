@@ -107,6 +107,16 @@ FALLBACK_MODELS = [
     "meta-llama/llama-4-maverick:free",
 ]
 
+THINKING_MODELS = {"qwen/qwen3-coder:free", "qwen/qwen3-next-80b-a3b-instruct:free", "deepseek/deepseek-r1-0528:free"}
+
+
+def _fix_model(model: str) -> str:
+    if model in THINKING_MODELS:
+        fixed = FALLBACK_MODELS[0]
+        logger.warning(f"Thinking model {model} detected, using {fixed} instead")
+        return fixed
+    return model
+
 
 async def _ask_openrouter(messages: list[dict]) -> str:
     if not OPENROUTER_API_KEY:
@@ -116,7 +126,7 @@ async def _ask_openrouter(messages: list[dict]) -> str:
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
-    models_to_try = [OPENROUTER_MODEL] + [m for m in FALLBACK_MODELS if m != OPENROUTER_MODEL]
+    models_to_try = [_fix_model(OPENROUTER_MODEL)] + [m for m in FALLBACK_MODELS if m != OPENROUTER_MODEL]
     for i, model in enumerate(models_to_try):
         payload = {
             "model": model,
