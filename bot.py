@@ -141,12 +141,10 @@ async def _ask_openrouter(messages: list[dict]) -> str:
                     f"{OPENROUTER_BASE_URL}/chat/completions",
                     json=payload,
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=60),
+                    timeout=aiohttp.ClientTimeout(total=30),
                 ) as resp:
                     if resp.status == 429:
-                        wait = min(10 * (i + 1), 60)
-                        logger.warning(f"Rate limit (429) на {model}, ждём {wait}с...")
-                        await asyncio.sleep(wait)
+                        logger.warning(f"Rate limit (429) на {model}, следующая модель...")
                         continue
                     if resp.status != 200:
                         text = await resp.text()
@@ -169,7 +167,7 @@ async def _ask_openrouter(messages: list[dict]) -> str:
         except Exception as e:
             logger.error(f"OpenRouter error ({model}): {e}")
             continue
-    return "AI временно недоступен. Попробуй через минуту."
+    return "🤖 AI сейчас перегружен (rate limit). Попробуй переформулировать через минуту.\n\nА пока могу:\n— Погода в любом городе\n— Курсы валют\n— Заметки и напоминания"
 
 
 async def _ask_huggingface(messages: list[dict]) -> str:
