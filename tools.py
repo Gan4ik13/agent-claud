@@ -5,7 +5,7 @@ import urllib.parse
 from datetime import datetime, timedelta
 from typing import Optional
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 from database import Database
 

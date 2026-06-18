@@ -101,12 +101,12 @@ async def _ask_ollama(messages: list[dict]) -> str:
 
 
 FALLBACK_MODELS = [
-    "qwen/qwen3-coder:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "openai/gpt-oss-120b:free",
-    "google/gemma-4-31b-it:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free",
+    "qwen/qwen3-coder:free",
+    "google/gemma-3-27b-it:free",
+    "mistralai/mistral-small-3.2-24b-instruct:free",
+    "meta-llama/llama-4-maverick:free",
+    "deepseek/deepseek-r1-0528:free",
 ]
 
 
@@ -119,7 +119,7 @@ async def _ask_openrouter(messages: list[dict]) -> str:
         "Content-Type": "application/json",
     }
     models_to_try = [OPENROUTER_MODEL] + [m for m in FALLBACK_MODELS if m != OPENROUTER_MODEL]
-    for model in models_to_try:
+    for i, model in enumerate(models_to_try):
         payload = {
             "model": model,
             "messages": messages,
@@ -135,8 +135,9 @@ async def _ask_openrouter(messages: list[dict]) -> str:
                     timeout=aiohttp.ClientTimeout(total=60),
                 ) as resp:
                     if resp.status == 429:
-                        logger.warning(f"OpenRouter rate limit on {model}, trying next...")
-                        await asyncio.sleep(2)
+                        wait = min(5 * (i + 1), 30)
+                        logger.warning(f"Rate limit (429) на {model}, ждём {wait}с...")
+                        await asyncio.sleep(wait)
                         continue
                     if resp.status != 200:
                         text = await resp.text()
