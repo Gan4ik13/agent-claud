@@ -119,10 +119,10 @@ def _fix_model(model: str) -> str:
     return model
 
 
-async def _ask_openrouter(messages: list[dict]) -> str:
+async def _ask_openrouter(messages: list[dict]) -> str | None:
     if not OPENROUTER_API_KEY:
-        logger.error("OPENROUTER_API_KEY is empty! Set it in Render Environment Variables.")
-        return "OPENROUTER_API_KEY не задан. Настрой переменную окружения в Render."
+        logger.error("OPENROUTER_API_KEY is empty!")
+        return None
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -144,8 +144,8 @@ async def _ask_openrouter(messages: list[dict]) -> str:
                     timeout=aiohttp.ClientTimeout(total=45),
                 ) as resp:
                     if resp.status == 429:
-                        wait = min(15 * (i + 1), 60)
-                        logger.warning(f"Rate limit (429) на {model}, ждём {wait}с...")
+                        wait = min(15 * (i + 1), 45)
+                        logger.warning(f"Rate limit на {model}, ждём {wait}с...")
                         await asyncio.sleep(wait)
                         continue
                     if resp.status != 200:
@@ -169,7 +169,7 @@ async def _ask_openrouter(messages: list[dict]) -> str:
         except Exception as e:
             logger.error(f"OpenRouter error ({model}): {e}")
             continue
-    return "🤖 AI сейчас перегружен (rate limit на бесплатных моделях). Попробуй переформулировать через ~5-10 минут.\n\nА пока я могу:\n— Погода в любом городе\n— Курсы валют (USD, EUR, CNY)\n— Заметки и напоминания"
+    return None
 
 
 async def _ask_huggingface(messages: list[dict]) -> str:
@@ -393,15 +393,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     messages = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + build_now_context()}]
     for m in history:
         messages.append({"role": m["role"], "content": m["content"]})
-
     messages.append({"role": "user", "content": user_text})
 
     db.add_message(user_id, "user", user_text)
 
-    answer = await ask_ai(messages)
+    status_msg = await update.message.reply_text("⏳ Думаю... (попытка 1)")
 
-    db.add_message(user_id, "assistant", answer)
-    await safe_send(update, answer)
+    MAX_ROUNDS = 5
+    for round_num in range(1, MAX_ROUNDS + 1):
+        elapsed = (round_num - 1) * 2
+        if round_num > 1:
+            try:
+                await status_msg.edit_text(f"⏳ Всё ещё думаю... (~{elapsed} мин прошло, попытка {round_num})")
+            except Exception:
+                pass
+            await asyncio.sleep(5)
+
+        answer = await ask_ai(messages)
+        if answer:
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+            db.add_message(user_id, "assistant", answer)
+            await safe_send(update, answer)
+            return
+
+    try:
+        await status_msg.edit_text(
+            "🤖 AI перегружен (rate limit). "
+            "Попробуй переформулировать через ~5-10 мин.\n\n"
+            "А пока я могу:\n— Погода\n— Курсы валют\n— Заметки и напоминания"
+        )
+    except Exception:
+        pass
 
 
 async def reminder_checker(context: ContextTypes.DEFAULT_TYPE):
