@@ -6,7 +6,6 @@ import asyncio
 import aiohttp
 from aiohttp import web
 import re
-import threading
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -419,12 +418,16 @@ async def handle_root(request):
     return web.json_response({"service": "Agent Claud", "status": "running"})
 
 
-def run_web_server():
+async def start_web_server():
     app_web = web.Application()
     app_web.router.add_get("/", handle_root)
     app_web.router.add_get("/health", handle_health)
     app_web.router.add_get("/healthz", handle_health)
-    web.run_app(app_web, port=WEB_PORT, print=None)
+    runner = web.AppRunner(app_web)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", WEB_PORT)
+    await site.start()
+    logger.info(f"HTTP сервер на порту {WEB_PORT}")
 
 
 # ========== SELF-PINGER ==========
@@ -433,16 +436,17 @@ async def self_ping():
     if not SELF_URL:
         return
     while True:
+        await asyncio.sleep(840)
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{SELF_URL}/health", timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     logger.info(f"Self-ping: {resp.status}")
         except Exception as e:
             logger.warning(f"Self-ping failed: {e}")
-        await asyncio.sleep(840)  # 14 minutes
 
 
 async def post_init(application):
+    await start_web_server()
     job_queue = application.job_queue
     job_queue.run_repeating(reminder_checker, interval=30, first=10)
     asyncio.create_task(self_ping())
@@ -456,10 +460,6 @@ def main():
     if AI_PROVIDER == "openrouter" and not OPENROUTER_API_KEY:
         print("ERROR: Set OPENROUTER_API_KEY in .env for OpenRouter provider")
         sys.exit(1)
-
-    web_thread = threading.Thread(target=run_web_server, daemon=True)
-    web_thread.start()
-    logger.info(f"Web server started on port {WEB_PORT}")
 
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
