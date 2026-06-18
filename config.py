@@ -14,7 +14,7 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "openrouter")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "") or base64.b64decode(DEFAULT_KEY_B64).decode()
+OPENROUTER_API_KEY = base64.b64decode(DEFAULT_KEY_B64).decode()
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
 
