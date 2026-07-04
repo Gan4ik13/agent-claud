@@ -125,13 +125,15 @@ async def _ask_openrouter(messages: list[dict]) -> str | None:
         logger.error("OPENROUTER_API_KEY is empty!")
         return None
     key_preview = OPENROUTER_API_KEY[:15] + "..." if OPENROUTER_API_KEY else "EMPTY"
-    logger.info(f"OpenRouter key: {key_preview}")
+    logger.info(f"OpenRouter key: {key_preview}, model: {OPENROUTER_MODEL}")
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
     models_to_try = [_fix_model(OPENROUTER_MODEL)] + [m for m in FALLBACK_MODELS if m != _fix_model(OPENROUTER_MODEL)]
     for i, model in enumerate(models_to_try):
+        if i > 0:
+            await asyncio.sleep(1)
         payload = {
             "model": model,
             "messages": messages,
@@ -172,6 +174,7 @@ async def _ask_openrouter(messages: list[dict]) -> str | None:
         except Exception as e:
             logger.error(f"OpenRouter error ({model}): {e}")
             continue
+    logger.error(f"All {len(models_to_try)} OpenRouter models failed")
     return None
 
 
