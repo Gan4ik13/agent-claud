@@ -101,15 +101,12 @@ async def _ask_ollama(messages: list[dict]) -> str:
 
 
 FALLBACK_MODELS = [
+    "openrouter/free",
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "nvidia/nemotron-3-nano-30b-a3b:free",
     "google/gemma-4-31b-it:free",
     "google/gemma-4-26b-a4b-it:free",
     "qwen/qwen3-next-80b-a3b-instruct:free",
-    "cohere-for-ai/c4ai-command-a-plus-08-2024:free",
     "liquid/lfm-2.5-1.2b-instruct:free",
-    "microsoft/phi-3.5-mini-128k-instruct:free",
 ]
 
 THINKING_MODELS = {"deepseek/deepseek-r1-0528:free", "deepseek/deepseek-r1-distill-llama-70b:free"}
@@ -127,6 +124,8 @@ async def _ask_openrouter(messages: list[dict]) -> str | None:
     if not OPENROUTER_API_KEY:
         logger.error("OPENROUTER_API_KEY is empty!")
         return None
+    key_preview = OPENROUTER_API_KEY[:15] + "..." if OPENROUTER_API_KEY else "EMPTY"
+    logger.info(f"OpenRouter key: {key_preview}")
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
