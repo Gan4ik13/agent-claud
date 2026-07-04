@@ -106,9 +106,13 @@ FALLBACK_MODELS = [
     "nvidia/nemotron-3-nano-30b-a3b:free",
     "google/gemma-4-31b-it:free",
     "google/gemma-4-26b-a4b-it:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "cohere-for-ai/c4ai-command-a-plus-08-2024:free",
+    "liquid/lfm-2.5-1.2b-instruct:free",
+    "microsoft/phi-3.5-mini-128k-instruct:free",
 ]
 
-THINKING_MODELS = {"qwen/qwen3-coder:free", "qwen/qwen3-next-80b-a3b-instruct:free", "deepseek/deepseek-r1-0528:free"}
+THINKING_MODELS = {"deepseek/deepseek-r1-0528:free", "deepseek/deepseek-r1-distill-llama-70b:free"}
 
 
 def _fix_model(model: str) -> str:
@@ -127,12 +131,12 @@ async def _ask_openrouter(messages: list[dict]) -> str | None:
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
-    models_to_try = [_fix_model(OPENROUTER_MODEL)] + [m for m in FALLBACK_MODELS if m != OPENROUTER_MODEL]
+    models_to_try = [_fix_model(OPENROUTER_MODEL)] + [m for m in FALLBACK_MODELS if m != _fix_model(OPENROUTER_MODEL)]
     for i, model in enumerate(models_to_try):
         payload = {
             "model": model,
             "messages": messages,
-            "max_tokens": 2048,
+            "max_tokens": 1024,
             "temperature": 0.7,
         }
         try:
@@ -141,10 +145,10 @@ async def _ask_openrouter(messages: list[dict]) -> str | None:
                     f"{OPENROUTER_BASE_URL}/chat/completions",
                     json=payload,
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=45),
+                    timeout=aiohttp.ClientTimeout(total=30),
                 ) as resp:
                     if resp.status == 429:
-                        wait = min(15 * (i + 1), 45)
+                        wait = min(5 * (i + 1), 20)
                         logger.warning(f"Rate limit на {model}, ждём {wait}с...")
                         await asyncio.sleep(wait)
                         continue
@@ -397,32 +401,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     db.add_message(user_id, "user", user_text)
 
-    status_msg = await update.message.reply_text("⏳ Думаю... (попытка 1)")
+    status_msg = await update.message.reply_text("⏳ Думаю...")
 
-    MAX_ROUNDS = 5
-    for round_num in range(1, MAX_ROUNDS + 1):
-        elapsed = (round_num - 1) * 2
-        if round_num > 1:
-            try:
-                await status_msg.edit_text(f"⏳ Всё ещё думаю... (~{elapsed} мин прошло, попытка {round_num})")
-            except Exception:
-                pass
-            await asyncio.sleep(5)
-
-        answer = await ask_ai(messages)
-        if answer:
-            try:
-                await status_msg.delete()
-            except Exception:
-                pass
-            db.add_message(user_id, "assistant", answer)
-            await safe_send(update, answer)
-            return
+    answer = await ask_ai(messages)
+    if answer:
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        db.add_message(user_id, "assistant", answer)
+        await safe_send(update, answer)
+        return
 
     try:
         await status_msg.edit_text(
-            "🤖 AI перегружен (rate limit). "
-            "Попробуй переформулировать через ~5-10 мин.\n\n"
+            "🤖 AI временно недоступен (перегрузка). "
+            "Попробуй через пару минут.\n\n"
             "А пока я могу:\n— Погода\n— Курсы валют\n— Заметки и напоминания"
         )
     except Exception:
