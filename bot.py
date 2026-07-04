@@ -62,15 +62,19 @@ WEB_PORT = int(os.environ.get("PORT", 8080))
 SELF_URL = os.environ.get("SELF_URL", "")
 
 
-async def ask_ai(messages: list[dict]) -> str:
+async def ask_ai(messages: list[dict]) -> str | None:
     if AI_PROVIDER == "ollama":
         return await _ask_ollama(messages)
     elif AI_PROVIDER == "openrouter":
-        return await _ask_openrouter(messages)
+        result = await _ask_openrouter(messages)
+        if result is not None:
+            return result
+        logger.warning("OpenRouter failed, falling back to HuggingFace...")
+        return await _ask_huggingface(messages)
     elif AI_PROVIDER == "huggingface":
         return await _ask_huggingface(messages)
     else:
-        return "AI не настроен. Укажи AI_PROVIDER в .env"
+        return None
 
 
 async def _ask_ollama(messages: list[dict]) -> str:
@@ -133,7 +137,7 @@ async def _ask_openrouter(messages: list[dict]) -> str | None:
     models_to_try = [_fix_model(OPENROUTER_MODEL)] + [m for m in FALLBACK_MODELS if m != _fix_model(OPENROUTER_MODEL)]
     for i, model in enumerate(models_to_try):
         if i > 0:
-            await asyncio.sleep(1)
+            await asyncio.sleep(2 if i < 3 else 30)
         payload = {
             "model": model,
             "messages": messages,
@@ -149,7 +153,7 @@ async def _ask_openrouter(messages: list[dict]) -> str | None:
                     timeout=aiohttp.ClientTimeout(total=30),
                 ) as resp:
                     if resp.status == 429:
-                        wait = min(5 * (i + 1), 20)
+                        wait = 30
                         logger.warning(f"Rate limit на {model}, ждём {wait}с...")
                         await asyncio.sleep(wait)
                         continue
